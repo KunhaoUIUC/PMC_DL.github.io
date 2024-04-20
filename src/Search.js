@@ -5,59 +5,54 @@ const Search = () => {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
- 
-  // const searchArticlesByAuthor = async () => {
-  //   setError('');
-  //   setLoading(true);
-  //   setArticles([]);
 
-  //   const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-  //   const query = encodeURIComponent(`${authorName.trim()}[AUTH]`);
-  //   const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08'; // temporary use
-  //   const targetUrl = `https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi?term=${query}&api_key=${apiKey}`;
-  //   const apiUrl = proxyUrl + targetUrl;
+  // Helper function to fetch article details
+  const fetchArticleDetails = async (pmcid) => {
+    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+    const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08';
+    const detailsUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=${pmcid}&api_key=${apiKey}`;
+    const apiUrl = proxyUrl + detailsUrl;
 
-  //   try {
-  //     const response = await fetch(apiUrl);
-  //     if (!response.ok) {
-  //       throw new Error(`HTTP error! Status: ${response.status}`);
-  //     }
-  //     const text = await response.text();
-  //     const parser = new DOMParser();
-  //     const xmlDoc = parser.parseFromString(text, "application/xml")
-  //     const records = xmlDoc.querySelectorAll("record");
+    try {
+      const response = await fetch(apiUrl);
+      const text = await response.text();
+      const parser = new DOMParser();
+      const xmlDoc = parser.parseFromString(text, "application/xml");
+      
+      // Parse the XML for the citation details. Adjust the selector based on the actual XML structure.
+      const citationElement = xmlDoc.querySelector('article-meta > title-group > article-title');
+      const citation = citationElement ? citationElement.textContent : 'Citation not found';
+      
+      return {
+        pmcid,
+        citation,
+        downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/pdf/`
+      };
+    } catch (error) {
+      console.error(`Error fetching details for PMCID ${pmcid}: `, error);
+      return {
+        pmcid,
+        title: 'Error fetching title',
+        citation: 'Error fetching citation',
+        downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/pdf/`
+      };
+    }
+  };
 
-  //     const articlesData = Array.from(records).map(record => {
-  //       const pmcid = record.id.replace('record#', '');
-  //       const citation = record.getAttribute('citation');
-  //       return {
-  //         pmcid,
-  //         citation,
-  //         downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/${pmcid}/pdf/`            };
-  //  });
-  //       setArticles(articlesData);
-  //     } catch (error) {
-  //       setError(`Failed to fetch articles: ${error.message}`);
-  //     } finally{
-  //       setLoading(false);
-  //     }
-
-  //   };
   const searchArticlesByAuthor = async () => {
     setError('');
     setLoading(true);
     setArticles([]);
-  
+
     const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
     const query = encodeURIComponent(`${authorName.trim()}[AUTH]`);
-    const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08'; // Ensure you replace this with your actual API key
+    const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08';
     let articlesData = [];
-    
-    // Helper function to fetch page by page
+
     const fetchPage = async (retstart) => {
       const targetUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query}&retmax=20&retstart=${retstart}&usehistory=y&api_key=${apiKey}`;
       const apiUrl = proxyUrl + targetUrl;
-  
+
       try {
         const response = await fetch(apiUrl);
         if (!response.ok) {
@@ -66,25 +61,15 @@ const Search = () => {
         const text = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, "application/xml");
-        const records = xmlDoc.querySelectorAll("Id");
-  
-        if (records.length) {
-          const newArticles = Array.from(records).map(record => {
-            const pmcid = record.textContent;
-            return {
-              pmcid,
-              citation: `PMC${pmcid}`, // Replace with actual citation if available
-              downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/pdf/`
-            };
-          });
-  
-          articlesData = [...articlesData, ...newArticles];
-  
-          if (records.length === 20) {
-            await fetchPage(retstart + 20);
-          } else {
-            setArticles(articlesData);
-          }
+        const pmcids = Array.from(xmlDoc.querySelectorAll("Id")).map(id => id.textContent);
+
+        for (const pmcid of pmcids) {
+          const articleDetails = await fetchArticleDetails(pmcid);
+          articlesData.push(articleDetails);
+        }
+
+        if (pmcids.length === 20) {
+          await fetchPage(retstart + 20);
         } else {
           setArticles(articlesData);
         }
@@ -94,9 +79,8 @@ const Search = () => {
         setLoading(false);
       }
     };
-  
-    // Initial call to fetchPage with retstart=0 to get the first page
-    await fetchPage(0);
+
+    await fetchPage(0); // Start with the first page
   };
   const handleDownloadClick = (articleId, articleTitle) => {
     // 这里使用了Cors Anywhere代理服务
