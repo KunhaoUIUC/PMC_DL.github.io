@@ -50,9 +50,10 @@ const Search = () => {
   
     const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
     const query = encodeURIComponent(`${authorName.trim()}[AUTH]`);
-    const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08';
+    const apiKey = 'a72e2410b259ec3b646175c1aa0e1f13eb08'; // Ensure you replace this with your actual API key
     let articlesData = [];
-  
+    
+    // Helper function to fetch page by page
     const fetchPage = async (retstart) => {
       const targetUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&term=${query}&retmax=20&retstart=${retstart}&usehistory=y&api_key=${apiKey}`;
       const apiUrl = proxyUrl + targetUrl;
@@ -65,22 +66,25 @@ const Search = () => {
         const text = await response.text();
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(text, "application/xml");
-        const records = xmlDoc.querySelectorAll("record");
+        const records = xmlDoc.querySelectorAll("Id");
   
-        const newArticles = Array.from(records).map(record => {
-          const pmcid = record.querySelector("PMCID").textContent;
-          const citation = record.querySelector("ArticleTitle").textContent;
-          return {
-            pmcid,
-            citation,
-            downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/pdf/`
-          };
-        });
+        if (records.length) {
+          const newArticles = Array.from(records).map(record => {
+            const pmcid = record.textContent;
+            return {
+              pmcid,
+              citation: `PMC${pmcid}`, // Replace with actual citation if available
+              downloadUrl: `https://www.ncbi.nlm.nih.gov/pmc/articles/PMC${pmcid}/pdf/`
+            };
+          });
   
-        articlesData = [...articlesData, ...newArticles];
+          articlesData = [...articlesData, ...newArticles];
   
-        if (records.length === 20) {
-          await fetchPage(retstart + 20);
+          if (records.length === 20) {
+            await fetchPage(retstart + 20);
+          } else {
+            setArticles(articlesData);
+          }
         } else {
           setArticles(articlesData);
         }
@@ -94,7 +98,6 @@ const Search = () => {
     // Initial call to fetchPage with retstart=0 to get the first page
     await fetchPage(0);
   };
-  
   const handleDownloadClick = (articleId, articleTitle) => {
     // 这里使用了Cors Anywhere代理服务
     const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
